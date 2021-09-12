@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="AnimeRandomizer:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/AnimeRandomizer</output-path>
+    <root id="archive" name="AnimeRandomizer.jar">
+      <element id="module-output" name="AnimeRandomizer" />
+    </root>
+  </artifact>
+</component>
