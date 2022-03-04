@@ -1,0 +1,16 @@
+apply plugin: 'java'
+apply plugin: 'application'
+
+group 'com.git.arcanesunku'
+version '3.4.2022-SNAPSHOT'
+mainClassName = 'Randomizer'
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    google()
+}
+
+dependencies {
+
+}
