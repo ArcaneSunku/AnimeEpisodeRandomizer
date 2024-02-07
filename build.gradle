@@ -1,9 +1,21 @@
-apply plugin: 'java'
-apply plugin: 'application'
+apply plugin: 'java-library'
+apply plugin: 'eclipse'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+sourceSets.main.java.srcDirs = [ "src/" ]
+sourceSets.main.resources.srcDirs = [ "./assets" ]
 
 group 'com.git.arcanesunku'
-version '3.4.2022-SNAPSHOT'
-mainClassName = 'Randomizer'
+version '1.0.1'
+
+project.ext.appName = "AnimRandomizer"
+project.ext.mainClassName = "Randomizer"
+project.ext.assetsDir = new File("./assets")
 
 repositories {
     mavenLocal()
@@ -14,3 +26,47 @@ repositories {
 dependencies {
 
 }
+
+// Tasks
+
+import org.gradle.internal.os.OperatingSystem
+
+tasks.register('run', JavaExec) {
+    dependsOn classes
+    mainClass = project.mainClassName
+    classpath = sourceSets.main.runtimeClasspath
+    standardInput = System.in
+    workingDir = project.assetsDir
+    ignoreExitValue = true as JavaExecSpec
+
+    if(OperatingSystem.current() == OperatingSystem.MAC_OS) {
+        jvmArgs += "-XstartOnFirstThread"
+    }
+}
+
+tasks.register('debug', JavaExec) {
+    dependsOn classes
+    mainClass = project.mainClassName
+    classpath = sourceSets.main.runtimeClasspath
+    standardInput = System.in
+    workingDir = project.assetsDir
+    ignoreExitValue = true as JavaExecSpec
+    debug = true as JavaExecSpec
+}
+
+tasks.register('dist', Jar) {
+    dependsOn classes
+
+    duplicatesStrategy(DuplicatesStrategy.EXCLUDE)
+    manifest {
+        attributes 'Main-Class' : project.mainClassName
+    }
+
+    dependsOn configurations.runtimeClasspath
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    with jar
+}
+
+eclipse.project.name = project.appName
