@@ -4,12 +4,14 @@ import dev.atomixsoft.randomizer.App;
 import dev.atomixsoft.randomizer.api.AnimeCatalogClient;
 import dev.atomixsoft.randomizer.api.tenrai.TenraiCatalogClient;
 import dev.atomixsoft.randomizer.cache.AnimeArtworkCache;
+import dev.atomixsoft.randomizer.persistence.AnimeLibraryRepository;
 import dev.atomixsoft.randomizer.persistence.ApplicationPaths;
 import dev.atomixsoft.randomizer.persistence.JsonAnimeLibraryRepository;
 import dev.atomixsoft.randomizer.persistence.JsonEpisodeCatalogRepository;
+import dev.atomixsoft.randomizer.persistence.JsonSelectionHistoryRepository;
 import dev.atomixsoft.randomizer.service.AnimeLibraryService;
 import dev.atomixsoft.randomizer.service.EpisodeCatalogService;
-import dev.atomixsoft.randomizer.service.EpisodeFileService;
+import dev.atomixsoft.randomizer.service.EpisodeRandomizerService;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -31,19 +33,26 @@ public final class MainWindow extends JFrame {
     private final JPanel m_Pages = new JPanel(m_PageLayout);
     private final ButtonGroup m_NavigationGroup = new ButtonGroup();
     private final SessionActivityPanel m_ActivityPanel = new SessionActivityPanel();
+    private final RandomizerPanel m_RandomizerPanel;
     private final AnimeArtworkCache m_ArtworkCache = new AnimeArtworkCache(ApplicationPaths.cacheDirectory().resolve("artwork"));
 
     public MainWindow() {
         super("Anime Episode Randomizer");
 
-        m_Pages.add(new RandomizerPanel(new EpisodeFileService(), m_ActivityPanel::addSelection), RANDOMIZER);
+        AnimeLibraryRepository savedLibrary = new JsonAnimeLibraryRepository(
+                ApplicationPaths.dataDirectory().resolve("library.json"));
+        JsonEpisodeCatalogRepository episodeRepository = new JsonEpisodeCatalogRepository(
+                ApplicationPaths.cacheDirectory().resolve("episode-catalogs"));
+        EpisodeRandomizerService randomizer = new EpisodeRandomizerService(savedLibrary, episodeRepository,
+                new JsonSelectionHistoryRepository(ApplicationPaths.dataDirectory().resolve("history.json")));
+        m_RandomizerPanel = new RandomizerPanel(savedLibrary, randomizer, m_ArtworkCache, m_ActivityPanel::addSelection);
+        m_Pages.add(m_RandomizerPanel, RANDOMIZER);
         AnimeCatalogClient catalog = new TenraiCatalogClient();
 
-        EpisodeCatalogService episodeCatalogs = new EpisodeCatalogService(catalog,
-                new JsonEpisodeCatalogRepository(ApplicationPaths.cacheDirectory().resolve("episode-catalogs")));
+        EpisodeCatalogService episodeCatalogs = new EpisodeCatalogService(catalog, episodeRepository);
 
         m_Pages.add(new AnimeLibraryPanel(catalog,
-                new AnimeLibraryService(new JsonAnimeLibraryRepository(ApplicationPaths.dataDirectory().resolve("library.json"))),
+                new AnimeLibraryService(savedLibrary),
                 m_ArtworkCache, episodeCatalogs), LIBRARY);
 
         m_Pages.add(m_ActivityPanel, ACTIVITY);
@@ -165,7 +174,11 @@ public final class MainWindow extends JFrame {
         button.putClientProperty("JButton.buttonType", "roundRect");
         button.putClientProperty("FlatLaf.style", "arc: 14; focusWidth: 1; selectedBackground: #342f59; selectedForeground: #f2f3fa");
 
-        button.addActionListener(event -> m_PageLayout.show(m_Pages, page));
+        button.addActionListener(event -> {
+            if (RANDOMIZER.equals(page))
+                m_RandomizerPanel.reloadLibrary();
+            m_PageLayout.show(m_Pages, page);
+        });
 
         m_NavigationGroup.add(button);
         parent.add(button);
