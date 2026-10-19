@@ -4,6 +4,9 @@ import dev.atomixsoft.randomizer.model.Anime;
 import dev.atomixsoft.randomizer.model.AnimeEpisode;
 import dev.atomixsoft.randomizer.model.EpisodeCatalog;
 import dev.atomixsoft.randomizer.model.SelectionRecord;
+import dev.atomixsoft.randomizer.model.HistorySnapshot;
+import dev.atomixsoft.randomizer.model.SelectionHistoryEntry;
+import dev.atomixsoft.randomizer.model.SessionRecord;
 import dev.atomixsoft.randomizer.persistence.AnimeLibraryRepository;
 import dev.atomixsoft.randomizer.persistence.EpisodeCatalogRepository;
 import dev.atomixsoft.randomizer.persistence.SelectionHistoryRepository;
@@ -23,7 +26,6 @@ import java.util.Random;
 import static org.junit.jupiter.api.Assertions.*;
 
 public final class EpisodeRandomizerServiceTest {
-
     private static final Instant NOW = Instant.parse("2026-10-19T12:00:00Z");
     private final StubLibrary m_Library = new StubLibrary();
     private final StubCatalogs m_Catalogs = new StubCatalogs();
@@ -169,6 +171,16 @@ public final class EpisodeRandomizerServiceTest {
                 throw new IOException("Cannot save history");
             m_Selections.add(record);
         }
+        public HistorySnapshot snapshot() {
+            return new HistorySnapshot(List.of(), m_Selections.stream().map(record ->
+                    new SelectionHistoryEntry(record, SelectionHistoryEntry.Status.ACTIVE, null)).toList());
+        }
+        public void createSession(SessionRecord session) { }
+        public void renameSession(String id, String name) { }
+        public void undo(String id, Instant changedAt) { }
+        public int resetAnime(int animeId, Instant changedAt) { return 0; }
+        public int resetAll(Instant changedAt) { return 0; }
+        public boolean hasBackup() { return false; }
+        public void restoreBackup() { }
     }
-
 }

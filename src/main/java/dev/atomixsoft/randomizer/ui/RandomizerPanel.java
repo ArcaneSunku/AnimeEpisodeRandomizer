@@ -5,6 +5,7 @@ import dev.atomixsoft.randomizer.model.Anime;
 import dev.atomixsoft.randomizer.model.SelectionRecord;
 import dev.atomixsoft.randomizer.persistence.AnimeLibraryRepository;
 import dev.atomixsoft.randomizer.service.EpisodeRandomizerService;
+import dev.atomixsoft.randomizer.service.SelectionHistoryService;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -14,31 +15,26 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
 public final class RandomizerPanel extends JPanel {
-
     private final AnimeLibraryRepository m_Library;
     private final EpisodeRandomizerService m_Randomizer;
     private final AnimeArtworkCache m_Artwork;
     private final Consumer<SelectionRecord> m_OnSelection;
-    private final String m_SessionId = UUID.randomUUID().toString();
+    private final SelectionHistoryService m_Sessions;
+    private String m_SessionId;
 
     private final DefaultListModel<Anime> m_AnimeModel = new DefaultListModel<>();
     private final JList<Anime> m_AnimeList = new JList<>(m_AnimeModel);
-
     private final JRadioButton m_SingleMode = new JRadioButton("One anime", true);
     private final JRadioButton m_MultipleMode = new JRadioButton("Selected group");
-
     private final JComboBox<String> m_Weighting = new JComboBox<>(new String[]{"Equal chance per episode", "Equal chance per anime"});
     private final JCheckBox m_ExcludeFiller = new JCheckBox("Exclude filler");
     private final JCheckBox m_ExcludeRecap = new JCheckBox("Exclude recaps");
-
     private final JButton m_ReloadButton = UITheme.button("Reload library", false);
     private final JButton m_RandomizeButton = UITheme.button("Randomize episode", true);
-
     private final JLabel m_AvailableCount = UITheme.label("—", 29, true, UITheme.TEXT);
     private final JLabel m_SessionCount = UITheme.label("0", 29, true, UITheme.TEXT);
     private final JLabel m_ResultAnime = UITheme.label("Choose an anime to begin", 17, true, UITheme.TEXT);
@@ -50,15 +46,16 @@ public final class RandomizerPanel extends JPanel {
     private int m_ResultAnimeId = -1;
     private boolean m_Busy;
     private long m_PreviewRevision;
-    private int m_PicksThisRun;
 
     public RandomizerPanel(AnimeLibraryRepository library, EpisodeRandomizerService randomizer,
-                           AnimeArtworkCache artwork, Consumer<SelectionRecord> onSelection) {
+                           AnimeArtworkCache artwork, SelectionHistoryService sessions,
+                           Consumer<SelectionRecord> onSelection) {
         super(new BorderLayout());
         m_Library = library;
         m_Randomizer = randomizer;
         m_Artwork = artwork;
         m_OnSelection = onSelection;
+        m_Sessions = sessions;
         setBackground(UITheme.BACKGROUND);
 
         JPanel content = UITheme.panel();
@@ -81,12 +78,10 @@ public final class RandomizerPanel extends JPanel {
         modes.add(m_MultipleMode);
         m_SingleMode.addActionListener(event -> updateSelectionMode());
         m_MultipleMode.addActionListener(event -> updateSelectionMode());
-
         m_AnimeList.addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting())
                 updateAvailability();
         });
-
         m_Weighting.addActionListener(event -> updateAvailability());
         m_ExcludeFiller.addActionListener(event -> updateAvailability());
         m_ExcludeRecap.addActionListener(event -> updateAvailability());
@@ -109,13 +104,17 @@ public final class RandomizerPanel extends JPanel {
         new SwingWorker<List<Anime>, Void>() {
             @Override
             protected List<Anime> doInBackground() throws IOException {
-                return m_Library.load();
+                List<Anime> anime = m_Library.load();
+                m_Sessions.ensureSession();
+                return anime;
             }
 
             @Override
             protected void done() {
                 try {
                     List<Anime> anime = get();
+                    m_SessionId = m_Sessions.currentSession().orElseThrow().id();
+                    refreshSessionCount();
                     m_AnimeModel.clear();
                     anime.forEach(m_AnimeModel::addElement);
 
@@ -197,23 +196,18 @@ public final class RandomizerPanel extends JPanel {
         modes.add(m_SingleMode);
         modes.add(m_MultipleMode);
         card.add(modes, BorderLayout.SOUTH);
-
         return card;
     }
 
     private JPanel createOptions() {
         JPanel card = UITheme.card(new BorderLayout(0, 10));
         card.add(UITheme.label("SELECTION OPTIONS", 12, true, UITheme.MUTED), BorderLayout.NORTH);
-
         JPanel options = UITheme.panel();
         options.setLayout(new BoxLayout(options, BoxLayout.Y_AXIS));
-
         m_ExcludeFiller.setAlignmentX(LEFT_ALIGNMENT);
         m_ExcludeRecap.setAlignmentX(LEFT_ALIGNMENT);
-
         m_Weighting.setAlignmentX(LEFT_ALIGNMENT);
         m_Weighting.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
-
         options.add(m_ExcludeFiller);
         options.add(Box.createVerticalStrut(7));
         options.add(m_ExcludeRecap);
@@ -221,9 +215,7 @@ public final class RandomizerPanel extends JPanel {
         options.add(UITheme.label("Group weighting", 11, false, UITheme.MUTED));
         options.add(Box.createVerticalStrut(5));
         options.add(m_Weighting);
-
         card.add(options, BorderLayout.CENTER);
-
         m_Weighting.setEnabled(false);
         m_Weighting.setToolTipText("For group selection, choose whether every episode or every anime has equal odds.");
         return card;
@@ -232,7 +224,7 @@ public final class RandomizerPanel extends JPanel {
     private JPanel createStatistics() {
         JPanel stats = UITheme.panel(new GridLayout(1, 2, 16, 0));
         stats.add(statistic("AVAILABLE EPISODES", m_AvailableCount));
-        stats.add(statistic("PICKS THIS SESSION", m_SessionCount));
+        stats.add(statistic("ACTIVE PICKS THIS SESSION", m_SessionCount));
         return stats;
     }
 
@@ -284,13 +276,10 @@ public final class RandomizerPanel extends JPanel {
 
     private void updateSelectionMode() {
         List<Anime> selected = m_AnimeList.getSelectedValuesList();
-
         m_AnimeList.setSelectionMode(m_MultipleMode.isSelected()
                 ? ListSelectionModel.MULTIPLE_INTERVAL_SELECTION : ListSelectionModel.SINGLE_SELECTION);
-
         m_AnimeList.setToolTipText(m_MultipleMode.isSelected()
                 ? "Ctrl-click (or Command-click) to select several anime." : "Choose one anime.");
-
         if (!selected.isEmpty()) {
             if (m_SingleMode.isSelected())
                 m_AnimeList.setSelectedValue(selected.get(0), true);
@@ -305,17 +294,14 @@ public final class RandomizerPanel extends JPanel {
                 m_AnimeList.setSelectedIndices(indices.stream().mapToInt(Integer::intValue).toArray());
             }
         }
-
         updateControls();
         updateAvailability();
     }
 
     private EpisodeRandomizerService.Request request() {
         List<Integer> animeIds = m_AnimeList.getSelectedValuesList().stream().map(Anime::malId).toList();
-
         EpisodeRandomizerService.Weighting weighting = m_Weighting.getSelectedIndex() == 1
                 ? EpisodeRandomizerService.Weighting.PER_ANIME : EpisodeRandomizerService.Weighting.PER_EPISODE;
-
         return new EpisodeRandomizerService.Request(animeIds, m_ExcludeFiller.isSelected(),
                 m_ExcludeRecap.isSelected(), weighting, m_SessionId);
     }
@@ -373,16 +359,14 @@ public final class RandomizerPanel extends JPanel {
             protected void done() {
                 try {
                     SelectionRecord selection = get();
-
                     m_ResultAnimeId = selection.animeId();
                     m_ResultAnime.setText(selection.animeTitle());
                     m_ResultEpisode.setText("Episode " + selection.episodeNumber());
                     m_ResultTitle.setText(selection.episodeTitle());
                     m_ResultTitle.setToolTipText(selection.episodeTitle());
-                    m_SessionCount.setText(Integer.toString(++m_PicksThisRun));
+                    refreshSessionCount();
                     m_Feedback.setText("Selection saved. This episode won't be picked again.");
                     m_OnSelection.accept(selection);
-
                     updateResultArtwork(selection.animeId());
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
@@ -402,7 +386,6 @@ public final class RandomizerPanel extends JPanel {
             Anime anime = m_AnimeModel.get(i);
             if (anime.malId() != animeId)
                 continue;
-
             m_Cover.setIcon(null);
             m_Cover.setText("NO COVER");
             m_Artwork.load(anime).thenAccept(icon -> SwingUtilities.invokeLater(() -> {
@@ -415,19 +398,50 @@ public final class RandomizerPanel extends JPanel {
         }
     }
 
+    public void historyChanged() {
+        m_SessionId = m_Sessions.currentSession().map(session -> session.id()).orElse(null);
+        refreshSessionCount();
+        updateAvailability();
+        updateControls();
+    }
+
+    private void refreshSessionCount() {
+        String session = m_SessionId;
+        if (session == null)
+            return;
+
+        new SwingWorker<Integer, Void>() {
+            @Override
+            protected Integer doInBackground() throws IOException {
+                return m_Sessions.activeCount(session);
+            }
+
+            @Override
+            protected void done() {
+                if (!session.equals(m_SessionId))
+                    return;
+                try {
+                    m_SessionCount.setText(Integer.toString(get()));
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                } catch (ExecutionException exception) {
+                    m_Feedback.setText(message(exception.getCause()));
+                }
+            }
+        }.execute();
+    }
+
     private void setBusy(boolean busy, String feedback) {
         m_Busy = busy;
         ++m_PreviewRevision;
-
         if (feedback != null)
             m_Feedback.setText(feedback);
-
         updateControls();
     }
 
     private void updateControls() {
         m_ReloadButton.setEnabled(!m_Busy);
-        m_RandomizeButton.setEnabled(!m_Busy && !m_AnimeList.isSelectionEmpty());
+        m_RandomizeButton.setEnabled(!m_Busy && m_SessionId != null && !m_AnimeList.isSelectionEmpty());
         m_AnimeList.setEnabled(!m_Busy);
         m_SingleMode.setEnabled(!m_Busy);
         m_MultipleMode.setEnabled(!m_Busy);
@@ -446,5 +460,4 @@ public final class RandomizerPanel extends JPanel {
     private String message(Throwable cause) {
         return cause == null || cause.getMessage() == null ? "Unexpected error." : cause.getMessage();
     }
-
 }

@@ -21,17 +21,16 @@ import java.util.UUID;
 import java.util.random.RandomGenerator;
 
 public final class EpisodeRandomizerService {
-
     public enum Weighting {
         PER_EPISODE, PER_ANIME
     }
 
-    public record Request(List<Integer> animeIds, boolean excludeFiller, boolean excludeRecap, Weighting weighting, String sessionId) {
+    public record Request(List<Integer> animeIds, boolean excludeFiller, boolean excludeRecap,
+                          Weighting weighting, String sessionId) {
         public Request {
             animeIds = List.copyOf(animeIds);
             if (animeIds.isEmpty() || new HashSet<>(animeIds).size() != animeIds.size())
                 throw new IllegalArgumentException("Select one or more unique anime.");
-
             Objects.requireNonNull(weighting, "A selection weighting is required.");
             if (sessionId == null || sessionId.isBlank())
                 throw new IllegalArgumentException("A session identifier is required.");
@@ -59,7 +58,8 @@ public final class EpisodeRandomizerService {
     private final RandomGenerator m_Random;
     private final Clock m_Clock;
 
-    public EpisodeRandomizerService(AnimeLibraryRepository library, EpisodeCatalogRepository catalogs, SelectionHistoryRepository history) {
+    public EpisodeRandomizerService(AnimeLibraryRepository library, EpisodeCatalogRepository catalogs,
+                                    SelectionHistoryRepository history) {
         this(library, catalogs, history, RandomGenerator.getDefault(), Clock.systemUTC());
     }
 
@@ -115,7 +115,6 @@ public final class EpisodeRandomizerService {
 
     private SelectionPool buildPool(Request request) throws IOException {
         Objects.requireNonNull(request);
-
         Map<Integer, Anime> library = new HashMap<>();
         for (Anime anime : m_Library.load())
             library.put(anime.malId(), anime);

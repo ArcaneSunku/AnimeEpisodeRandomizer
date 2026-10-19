@@ -12,6 +12,7 @@ import dev.atomixsoft.randomizer.persistence.JsonSelectionHistoryRepository;
 import dev.atomixsoft.randomizer.service.AnimeLibraryService;
 import dev.atomixsoft.randomizer.service.EpisodeCatalogService;
 import dev.atomixsoft.randomizer.service.EpisodeRandomizerService;
+import dev.atomixsoft.randomizer.service.SelectionHistoryService;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -27,12 +28,12 @@ public final class MainWindow extends JFrame {
 
     private static final String RANDOMIZER = "randomizer";
     private static final String LIBRARY = "library";
-    private static final String ACTIVITY = "activity";
+    private static final String HISTORY = "history";
 
     private final CardLayout m_PageLayout = new CardLayout();
     private final JPanel m_Pages = new JPanel(m_PageLayout);
     private final ButtonGroup m_NavigationGroup = new ButtonGroup();
-    private final SessionActivityPanel m_ActivityPanel = new SessionActivityPanel();
+    private final HistoryPanel m_HistoryPanel;
     private final RandomizerPanel m_RandomizerPanel;
     private final AnimeArtworkCache m_ArtworkCache = new AnimeArtworkCache(ApplicationPaths.cacheDirectory().resolve("artwork"));
 
@@ -43,9 +44,13 @@ public final class MainWindow extends JFrame {
                 ApplicationPaths.dataDirectory().resolve("library.json"));
         JsonEpisodeCatalogRepository episodeRepository = new JsonEpisodeCatalogRepository(
                 ApplicationPaths.cacheDirectory().resolve("episode-catalogs"));
-        EpisodeRandomizerService randomizer = new EpisodeRandomizerService(savedLibrary, episodeRepository,
-                new JsonSelectionHistoryRepository(ApplicationPaths.dataDirectory().resolve("history.json")));
-        m_RandomizerPanel = new RandomizerPanel(savedLibrary, randomizer, m_ArtworkCache, m_ActivityPanel::addSelection);
+        JsonSelectionHistoryRepository historyRepository = new JsonSelectionHistoryRepository(
+                ApplicationPaths.dataDirectory().resolve("history.json"));
+        SelectionHistoryService history = new SelectionHistoryService(historyRepository);
+        EpisodeRandomizerService randomizer = new EpisodeRandomizerService(savedLibrary, episodeRepository, historyRepository);
+        m_RandomizerPanel = new RandomizerPanel(savedLibrary, randomizer, m_ArtworkCache,
+                history, selection -> refreshHistory());
+        m_HistoryPanel = new HistoryPanel(history, m_RandomizerPanel::historyChanged);
         m_Pages.add(m_RandomizerPanel, RANDOMIZER);
         AnimeCatalogClient catalog = new TenraiCatalogClient();
 
@@ -55,7 +60,7 @@ public final class MainWindow extends JFrame {
                 new AnimeLibraryService(savedLibrary),
                 m_ArtworkCache, episodeCatalogs), LIBRARY);
 
-        m_Pages.add(m_ActivityPanel, ACTIVITY);
+        m_Pages.add(m_HistoryPanel, HISTORY);
 
         JPanel root = new JPanel(new BorderLayout());
         root.setBackground(UITheme.BACKGROUND);
@@ -79,6 +84,10 @@ public final class MainWindow extends JFrame {
                 m_ArtworkCache.close();
             }
         });
+    }
+
+    private void refreshHistory() {
+        m_HistoryPanel.refresh();
     }
 
     private JPanel createSidebar() {
@@ -110,7 +119,7 @@ public final class MainWindow extends JFrame {
 
         addNavigation(top, "Randomizer", RANDOMIZER, true);
         addNavigation(top, "Anime Library", LIBRARY, false);
-        addNavigation(top, "Session Activity", ACTIVITY, false);
+        addNavigation(top, "History & Sessions", HISTORY, false);
 
         sidebar.add(top, BorderLayout.NORTH);
 
@@ -132,7 +141,7 @@ public final class MainWindow extends JFrame {
     }
 
     private JLabel createLogo() {
-        URL resource = App.class.getResource("/images/icon.gif");
+        URL resource = App.class.getResource("/images/icon.png");
         if (resource == null)
             throw new IllegalStateException("Application icon resource could not be found.");
 
@@ -177,6 +186,8 @@ public final class MainWindow extends JFrame {
         button.addActionListener(event -> {
             if (RANDOMIZER.equals(page))
                 m_RandomizerPanel.reloadLibrary();
+            if (HISTORY.equals(page))
+                m_HistoryPanel.refresh();
             m_PageLayout.show(m_Pages, page);
         });
 
