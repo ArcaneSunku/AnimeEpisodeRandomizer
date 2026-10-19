@@ -13,6 +13,9 @@ import dev.atomixsoft.randomizer.service.AnimeLibraryService;
 import dev.atomixsoft.randomizer.service.EpisodeCatalogService;
 import dev.atomixsoft.randomizer.service.EpisodeRandomizerService;
 import dev.atomixsoft.randomizer.service.SelectionHistoryService;
+import dev.atomixsoft.randomizer.cache.CacheMaintenanceService;
+import dev.atomixsoft.randomizer.settings.AppSettings;
+import dev.atomixsoft.randomizer.settings.JsonSettingsRepository;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -23,21 +26,27 @@ import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URL;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
+import java.util.HashMap;
+import java.util.Map;
 
 public final class MainWindow extends JFrame {
 
     private static final String RANDOMIZER = "randomizer";
     private static final String LIBRARY = "library";
     private static final String HISTORY = "history";
+    private static final String SETTINGS = "settings";
 
     private final CardLayout m_PageLayout = new CardLayout();
     private final JPanel m_Pages = new JPanel(m_PageLayout);
     private final ButtonGroup m_NavigationGroup = new ButtonGroup();
+    private final Map<String, JToggleButton> m_NavigationButtons = new HashMap<>();
     private final HistoryPanel m_HistoryPanel;
     private final RandomizerPanel m_RandomizerPanel;
     private final AnimeArtworkCache m_ArtworkCache = new AnimeArtworkCache(ApplicationPaths.cacheDirectory().resolve("artwork"));
 
-    public MainWindow() {
+    public MainWindow(JsonSettingsRepository settingsRepository, AppSettings settings) {
         super("Anime Episode Randomizer");
 
         AnimeLibraryRepository savedLibrary = new JsonAnimeLibraryRepository(
@@ -49,7 +58,7 @@ public final class MainWindow extends JFrame {
         SelectionHistoryService history = new SelectionHistoryService(historyRepository);
         EpisodeRandomizerService randomizer = new EpisodeRandomizerService(savedLibrary, episodeRepository, historyRepository);
         m_RandomizerPanel = new RandomizerPanel(savedLibrary, randomizer, m_ArtworkCache,
-                history, selection -> refreshHistory());
+                history, selection -> refreshHistory(), settings);
         m_HistoryPanel = new HistoryPanel(history, m_RandomizerPanel::historyChanged);
         m_Pages.add(m_RandomizerPanel, RANDOMIZER);
         AnimeCatalogClient catalog = new TenraiCatalogClient();
@@ -61,6 +70,9 @@ public final class MainWindow extends JFrame {
                 m_ArtworkCache, episodeCatalogs), LIBRARY);
 
         m_Pages.add(m_HistoryPanel, HISTORY);
+        m_Pages.add(new SettingsPanel(settingsRepository, settings,
+                new CacheMaintenanceService(ApplicationPaths.cacheDirectory()),
+                m_RandomizerPanel::applySettings), SETTINGS);
 
         JPanel root = new JPanel(new BorderLayout());
         root.setBackground(UITheme.BACKGROUND);
@@ -68,6 +80,7 @@ public final class MainWindow extends JFrame {
         root.add(m_Pages, BorderLayout.CENTER);
 
         setContentPane(root);
+        configureShortcuts();
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(820, 620));
         setSize(1080, 760);
@@ -84,6 +97,27 @@ public final class MainWindow extends JFrame {
                 m_ArtworkCache.close();
             }
         });
+    }
+
+    private void configureShortcuts() {
+        String[] pages = {RANDOMIZER, LIBRARY, HISTORY, SETTINGS};
+        int mask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        InputMap input = getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap actions = getRootPane().getActionMap();
+
+        for (int i = 0; i < pages.length; i++) {
+            String name = "navigate." + pages[i];
+            String page = pages[i];
+            input.put(KeyStroke.getKeyStroke(KeyEvent.VK_1 + i, mask), name);
+            actions.put(name, new AbstractAction() {
+                @Override
+                public void actionPerformed(ActionEvent event) {
+                    JToggleButton button = m_NavigationButtons.get(page);
+                    if (button != null)
+                        button.doClick();
+                }
+            });
+        }
     }
 
     private void refreshHistory() {
@@ -120,6 +154,7 @@ public final class MainWindow extends JFrame {
         addNavigation(top, "Randomizer", RANDOMIZER, true);
         addNavigation(top, "Anime Library", LIBRARY, false);
         addNavigation(top, "History & Sessions", HISTORY, false);
+        addNavigation(top, "Settings", SETTINGS, false);
 
         sidebar.add(top, BorderLayout.NORTH);
 
@@ -181,7 +216,9 @@ public final class MainWindow extends JFrame {
         button.setBackground(UITheme.SIDEBAR);
 
         button.putClientProperty("JButton.buttonType", "roundRect");
-        button.putClientProperty("FlatLaf.style", "arc: 14; focusWidth: 1; selectedBackground: #342f59; selectedForeground: #f2f3fa");
+        button.putClientProperty("FlatLaf.style", "arc: 14; focusWidth: 1; selectedBackground: #"
+                + Integer.toHexString(UITheme.SELECTION.getRGB() & 0xFFFFFF) + "; selectedForeground: #"
+                + Integer.toHexString(UITheme.TEXT.getRGB() & 0xFFFFFF));
 
         button.addActionListener(event -> {
             if (RANDOMIZER.equals(page))
@@ -192,6 +229,7 @@ public final class MainWindow extends JFrame {
         });
 
         m_NavigationGroup.add(button);
+        m_NavigationButtons.put(page, button);
         parent.add(button);
         parent.add(Box.createVerticalStrut(8));
         button.setSelected(initiallySelected);

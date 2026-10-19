@@ -6,13 +6,36 @@ import java.awt.*;
 
 public final class UITheme {
 
-    public static final Color BACKGROUND = new Color(0x14161C);
-    public static final Color SIDEBAR = new Color(0x1A1C24);
-    public static final Color CARD = new Color(0x21242E);
-    public static final Color CARD_BORDER = new Color(0x323744);
-    public static final Color TEXT = new Color(0xF2F3FA);
-    public static final Color MUTED = new Color(0xA1A6B8);
-    public static final Color ACCENT = new Color(0x7869EF);
+    public static Color BACKGROUND = new Color(0x14161C);
+    public static Color SIDEBAR = new Color(0x1A1C24);
+    public static Color CARD = new Color(0x21242E);
+    public static Color CARD_BORDER = new Color(0x323744);
+    public static Color TEXT = new Color(0xF2F3FA);
+    public static Color MUTED = new Color(0xA1A6B8);
+    public static Color ACCENT = new Color(0x7869EF);
+    public static Color SELECTION = new Color(0x373157);
+
+    public static void applyPalette(boolean light) {
+        if (light) {
+            BACKGROUND = new Color(0xF3F4F8);
+            SIDEBAR = new Color(0xE8EAF2);
+            CARD = new Color(0xFFFFFF);
+            CARD_BORDER = new Color(0xD6D9E5);
+            TEXT = new Color(0x212334);
+            MUTED = new Color(0x585F73);
+            ACCENT = new Color(0x5142BC);
+            SELECTION = new Color(0xDCD8FA);
+        } else {
+            BACKGROUND = new Color(0x14161C);
+            SIDEBAR = new Color(0x1A1C24);
+            CARD = new Color(0x21242E);
+            CARD_BORDER = new Color(0x323744);
+            TEXT = new Color(0xF2F3FA);
+            MUTED = new Color(0xA1A6B8);
+            ACCENT = new Color(0x7869EF);
+            SELECTION = new Color(0x373157);
+        }
+    }
 
     private UITheme() {
 
@@ -63,7 +86,7 @@ public final class UITheme {
         button.putClientProperty("JComponent.minimumHeight", 42);
         button.setFocusPainted(true);
         button.setBackground(primary ? ACCENT : CARD_BORDER);
-        button.setForeground(TEXT);
+        button.setForeground(primary ? Color.WHITE : TEXT);
         button.setMargin(new java.awt.Insets(10, 18, 10, 18));
 
         return button;

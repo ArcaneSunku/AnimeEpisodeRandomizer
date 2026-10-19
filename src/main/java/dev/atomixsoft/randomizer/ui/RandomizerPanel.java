@@ -6,6 +6,7 @@ import dev.atomixsoft.randomizer.model.SelectionRecord;
 import dev.atomixsoft.randomizer.persistence.AnimeLibraryRepository;
 import dev.atomixsoft.randomizer.service.EpisodeRandomizerService;
 import dev.atomixsoft.randomizer.service.SelectionHistoryService;
+import dev.atomixsoft.randomizer.settings.AppSettings;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -49,7 +50,7 @@ public final class RandomizerPanel extends JPanel {
 
     public RandomizerPanel(AnimeLibraryRepository library, EpisodeRandomizerService randomizer,
                            AnimeArtworkCache artwork, SelectionHistoryService sessions,
-                           Consumer<SelectionRecord> onSelection) {
+                           Consumer<SelectionRecord> onSelection, AppSettings settings) {
         super(new BorderLayout());
         m_Library = library;
         m_Randomizer = randomizer;
@@ -88,8 +89,16 @@ public final class RandomizerPanel extends JPanel {
         m_ReloadButton.addActionListener(event -> reloadLibrary());
         m_RandomizeButton.addActionListener(event -> randomize());
 
+        applySettings(settings);
         updateControls();
         reloadLibrary();
+    }
+
+    public void applySettings(AppSettings settings) {
+        m_ExcludeFiller.setSelected(settings.excludeFiller());
+        m_ExcludeRecap.setSelected(settings.excludeRecaps());
+        m_Weighting.setSelectedIndex(settings.groupWeighting() == AppSettings.GroupWeighting.PER_ANIME ? 1 : 0);
+        updateAvailability();
     }
 
     public void reloadLibrary() {
@@ -128,8 +137,6 @@ public final class RandomizerPanel extends JPanel {
                         m_AnimeList.setSelectedIndex(indices.get(0));
                     else if (!indices.isEmpty())
                         m_AnimeList.setSelectedIndices(indices.stream().mapToInt(Integer::intValue).toArray());
-                    else if (!anime.isEmpty())
-                        m_AnimeList.setSelectedIndex(0);
 
                     m_Feedback.setText(anime.isEmpty()
                             ? "Your library is empty. Add anime in Anime Library first."
@@ -183,7 +190,7 @@ public final class RandomizerPanel extends JPanel {
         m_AnimeList.setCellRenderer((list, anime, index, selected, focus) -> {
             JLabel label = UITheme.label(anime.title(), 13, false, UITheme.TEXT);
             label.setOpaque(true);
-            label.setBackground(selected ? new Color(0x373157) : UITheme.CARD);
+            label.setBackground(selected ? UITheme.SELECTION : UITheme.CARD);
             label.setBorder(new EmptyBorder(6, 10, 6, 10));
             return label;
         });

@@ -159,7 +159,7 @@ public final class HistoryPanel extends JPanel {
         m_Sessions.setCellRenderer((list, choice, index, selected, focus) -> {
             JPanel row = UITheme.panel(new BorderLayout(0, 4));
             row.setOpaque(true);
-            row.setBackground(selected ? new Color(0x373157) : UITheme.CARD);
+            row.setBackground(selected ? UITheme.SELECTION : UITheme.CARD);
             row.setBorder(new EmptyBorder(9, 10, 9, 10));
             String name = choice.session() == null ? "All sessions" : choice.session().name();
             JLabel title = UITheme.label(name, 13, true, UITheme.TEXT);
@@ -179,7 +179,7 @@ public final class HistoryPanel extends JPanel {
             SelectionRecord selection = entry.selection();
             JPanel row = UITheme.panel(new BorderLayout(0, 5));
             row.setOpaque(true);
-            row.setBackground(selected ? new Color(0x373157) : UITheme.CARD);
+            row.setBackground(selected ? UITheme.SELECTION : UITheme.CARD);
             row.setBorder(new EmptyBorder(9, 10, 9, 10));
             JLabel title = UITheme.label(selection.animeTitle() + " — Episode " + selection.episodeNumber(),
                     13, true, UITheme.TEXT);

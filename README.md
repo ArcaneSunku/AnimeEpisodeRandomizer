@@ -1,71 +1,99 @@
 # AnimeEpisodeRandomizer
 
-A little desktop app for when you want to watch an anime episode but don't feel like choosing one yourself.
+AnimeEpisodeRandomizer is a desktop app for picking an episode when you know which anime you want to watch but can't decide where to start. Choose a series from your saved library, hit **Randomize episode**, and the app picks one you haven't been assigned before.
 
-Pick an anime you've saved, hit **Randomize episode**, and watch the result however you normally would. The app doesn't stream anime or open a video player.
+It doesn't play video, open streaming sites, or keep track of what you've watched. It only makes the choice; how and where you watch is up to you.
 
-## What it does
+## Features
 
-- Search for anime and browse episode lists through the [Tenrai API](https://api.tenrai.org/).
-- Save anime to your own library, with cover art cached locally.
-- Cache complete episode lists and browse saved episodes offline.
-- Randomly pick an episode of **one chosen anime**, by default.
-- Optionally choose a group of anime and randomize across the group, either evenly by anime or evenly by episode.
-- Exclude filler or recap episodes, if you want.
-- Record every successful selection on disk so it won't be picked again after restarting.
-- Browse all selections, grouped by named sessions, including records that have been undone or reset.
-- Start, rename, or resume a session, and undo individual selections when you change your mind.
-- Reset the episode pool for one anime or for your whole library without erasing its selection history.
+- Find anime and browse episode titles with the [Tenrai API](https://api.tenrai.org/).
+- Save your own anime library, complete with cover art.
+- Download episode catalogs once and use them for random picks without an internet connection.
+- Randomize a single selected anime by default, or explicitly choose a group of series.
+- For group selection, give every episode equal odds or give every anime equal odds.
+- Optionally leave out filler episodes and recaps.
+- Keep a persistent record of selections so episodes don't repeat across launches.
+- Organize selections into sessions; undo or reset picks without deleting their history.
+- Adjust default filters, group weighting, and the dark/light appearance in Settings.
 
-The app doesn't automatically reset an exhausted episode pool. Resetting or undoing a selection makes those episodes eligible again, but keeps the original picks in your history.
+An exhausted series stays exhausted until you undo or reset selections. Starting another session doesn't automatically make old picks eligible again.
 
-## Running it
+## Getting started
 
-You'll need **Java 21**. There isn't a packaged installer yet, so run the app with the Gradle wrapper from the project directory.
-
-Linux or macOS:
+The simplest way to run the source project is with **JDK 21** and the included Gradle wrapper. From the project directory:
 
 ```sh
 ./gradlew run
 ```
 
-Windows:
+On Windows, use `gradlew.bat run`. Gradle downloads the dependencies on the first build.
 
-```bat
-gradlew.bat run
+Once the app is running:
+
+1. Search for an anime in **Anime Library** and add it to **Saved**.
+2. Select the saved series and open its episodes. The app downloads and caches the catalog. You can also use **Refresh episode list** to request fresh data.
+3. Open **Randomizer**, select one anime, and click **Randomize episode**.
+4. See your previous picks in **History & Sessions**. You can undo selections or reset a series there.
+
+Use **Ctrl+1** through **Ctrl+4** (or **Command+1** through **Command+4** where appropriate) to switch between the four application pages.
+
+Want a surprise across several shows? Switch the randomizer to **Selected group**, choose the series, and pick the weighting you prefer. Single-anime selection remains the default.
+
+Internet access is needed to search and download new catalogs. Cached catalogs and saved history are available offline. Java Swing uses XWayland on Wayland desktops such as Hyprland; make sure XWayland is enabled.
+
+## Settings and local files
+
+The program stores durable information separately from replaceable downloads. You can find both locations on the **Settings** page.
+
+| System | Application data | Cache |
+| --- | --- | --- |
+| Windows | `%APPDATA%\AnimeEpisodeRandomizer\` | `%LOCALAPPDATA%\AnimeEpisodeRandomizer\` |
+| Linux | `~/.local/share/AnimeEpisodeRandomizer/` | `~/.cache/AnimeEpisodeRandomizer/` |
+| macOS | `~/Library/Application Support/AnimeEpisodeRandomizer/` | `~/Library/Caches/AnimeEpisodeRandomizer/` |
+
+On Linux, the app respects `XDG_DATA_HOME` and `XDG_CACHE_HOME` when set to absolute paths.
+
+Application data includes `library.json`, `history.json`, and `settings.json`. The history repository also retains a `.bak` backup that can be restored from the history page. **Back up the application-data directory before moving machines or reinstalling your OS.** The cache contains artwork and episode catalogs and can be regenerated from the API.
+
+The Settings page lets you remove either cache type. Clearing episode catalogs temporarily disables offline episode browsing and randomization for those series until their catalogs have been downloaded again. If you change the appearance, restart the app to apply it. If the preferences file becomes unreadable, the application offers to start with defaults without immediately overwriting the damaged file.
+
+## Building and packaging
+
+To run the full test suite:
+
+```sh
+./gradlew clean test
 ```
 
-The first run downloads the build dependencies. Anime searches and catalog updates require an internet connection; previously cached episodes can be used offline. On Wayland desktops such as Hyprland, Swing runs through XWayland.
+To create a Java application distribution with launcher scripts and bundled dependencies:
 
-## Picking an episode
+```sh
+./gradlew installDist
+./gradlew distZip
+```
 
-1. Open **Anime Library**, search for a series, and add it to Saved.
-2. Open its episode list to populate the local catalog, or use **Refresh episode list** in Saved.
-3. Go to **Randomizer** and choose the anime.
-4. Adjust the filler/recap options if you'd like, and click **Randomize episode**.
+These Gradle distributions require Java 21 on the user's system. For a bundled Java runtime, use the native packaging scripts from **JDK 21**:
 
-The result is saved before it appears. If you've selected every eligible episode, the app tells you instead of repeating an earlier pick. To choose from multiple anime, switch to **Selected group** and select the shows you want to include.
+**Linux:**
 
-## Where your data goes
+```sh
+./scripts/package-linux.sh
+```
 
-Saved anime and selections live in the normal application-data directory for your OS:
+**Windows (PowerShell):**
 
-| System | Location |
-| --- | --- |
-| Windows | `%APPDATA%\AnimeEpisodeRandomizer\` |
-| Linux | `~/.local/share/AnimeEpisodeRandomizer/` |
-| macOS | `~/Library/Application Support/AnimeEpisodeRandomizer/` |
+```powershell
+.\scripts\package-windows.ps1
+```
 
-The app stores your saved collection in `library.json` and its selection and session history in `history.json`. A `history.json.bak` backup keeps the previous saved version; you can restore it from History & Sessions after confirming the replacement. On Linux, it respects `XDG_DATA_HOME` when configured.
+The default is a platform-specific `app-image`, written under `build/native/`. On Linux you can pass `deb` or `rpm` to the script; on Windows you can pass `exe` or `msi`. Installer formats may require additional OS packaging tools (such as WiX on Windows). Native packages must be built on their target OS, not cross-compiled.
 
-Artwork and episode catalogs are cached separately in the system's cache directory (on Linux, usually `~/.cache/AnimeEpisodeRandomizer/`). You can clear cached data without losing your saved library or selection history, although the episode catalogs must then be downloaded again.
+The native images include a Java runtime, so an end user doesn't need to install Java separately. Test the resulting launcher on your target distribution or Windows version before releasing it. Packages are not digitally signed.
 
-## History and sessions
+## A note on episode data
 
-The **History & Sessions** page shows every episode you've been assigned, even if you later undo or reset it. New runs start a fresh session automatically, but you can start a named session or switch to one you used earlier. Session history is only a way to group your picks; an episode picked in one session stays excluded in the others.
+Anime titles and episode details come from a third-party service. Availability and accuracy depend on the underlying catalog. Complete cached snapshots mean the app retrieved every page reported by the API; they don't guarantee the provider has every episode ever released. Previously recorded selections remain in your history even if you remove a series from the library or clear its cached catalog.
 
-Select a history entry and choose **Undo selection** to make that episode eligible again. **Reset anime** restores all active episodes for the selected show, and **Reset all** does the same across your saved collection. Both reset actions ask for confirmation and leave the previous records visible.
+## Technology
 
-If your history file becomes unreadable, the app won't silently overwrite it. The **Restore backup** option replaces it with the previous valid saved version, which may omit recent picks.
-
-Built with Java 21, Swing, [FlatLaf](https://www.formdev.com/flatlaf/), Jackson, and Gradle.
+Java 21, Swing, [FlatLaf](https://www.formdev.com/flatlaf/), Jackson, Gradle, and the Tenrai API.

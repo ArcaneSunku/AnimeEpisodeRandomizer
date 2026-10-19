@@ -14,7 +14,6 @@ import java.awt.*;
 
 public final class AnimeCardRenderer extends JPanel implements ListCellRenderer<Anime> {
 
-    private static final Color SELECTION = new Color(0x373157);
 
     private final AnimeArtworkCache m_Artwork;
     private final JLabel m_Cover = new JLabel("NO COVER", JLabel.CENTER);
@@ -56,7 +55,7 @@ public final class AnimeCardRenderer extends JPanel implements ListCellRenderer<
 
     @Override
     public Component getListCellRendererComponent(JList<? extends Anime> list, Anime anime, int index, boolean selected, boolean focused) {
-        m_Background = selected ? SELECTION : UITheme.CARD;
+        m_Background = selected ? UITheme.SELECTION : UITheme.CARD;
 
         ImageIcon icon = m_Artwork.getIfReady(anime);
         m_Cover.setIcon(icon);

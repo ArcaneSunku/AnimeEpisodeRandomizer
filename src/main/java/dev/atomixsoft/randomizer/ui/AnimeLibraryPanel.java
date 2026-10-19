@@ -571,7 +571,7 @@ public final class AnimeLibraryPanel extends JPanel {
     private JLabel listLabel(String text, boolean selected) {
         JLabel label = UITheme.label(text, 13, false, UITheme.TEXT);
         label.setOpaque(true);
-        label.setBackground(selected ? new Color(0x342F59) : UITheme.CARD);
+        label.setBackground(selected ? UITheme.SELECTION : UITheme.CARD);
         label.setBorder(new EmptyBorder(6, 10, 6, 10));
         label.setToolTipText(text);
         return label;
