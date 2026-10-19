@@ -23,6 +23,6 @@ New-Item -ItemType Directory -Path 'build/native' -Force | Out-Null
     --main-class 'dev.atomixsoft.randomizer.App' `
     --icon 'packaging/icon.ico' `
     --dest 'build/native' `
-    --add-modules 'java.desktop,java.net.http,jdk.crypto.ec,jdk.charsets'
+    --add-modules 'java.desktop,java.net.http,jdk.crypto.ec,jdk.charsets,jdk.random'
 if ($LASTEXITCODE -ne 0) { throw 'Native packaging failed.' }
 Write-Output "Created $packageType output in build/native"
