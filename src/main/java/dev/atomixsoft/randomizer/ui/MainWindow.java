@@ -1,11 +1,18 @@
 package dev.atomixsoft.randomizer.ui;
 
 import dev.atomixsoft.randomizer.App;
+import dev.atomixsoft.randomizer.api.tenrai.TenraiCatalogClient;
+import dev.atomixsoft.randomizer.cache.AnimeArtworkCache;
+import dev.atomixsoft.randomizer.persistence.ApplicationPaths;
+import dev.atomixsoft.randomizer.persistence.JsonAnimeLibraryRepository;
+import dev.atomixsoft.randomizer.service.AnimeLibraryService;
 import dev.atomixsoft.randomizer.service.EpisodeFileService;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.net.URL;
 
 public final class MainWindow extends JFrame {
@@ -18,12 +25,15 @@ public final class MainWindow extends JFrame {
     private final JPanel m_Pages = new JPanel(m_PageLayout);
     private final ButtonGroup m_NavigationGroup = new ButtonGroup();
     private final SessionActivityPanel m_ActivityPanel = new SessionActivityPanel();
+    private final AnimeArtworkCache m_ArtworkCache = new AnimeArtworkCache(ApplicationPaths.cacheDirectory().resolve("artwork"));
 
     public MainWindow() {
         super("Anime Episode Randomizer");
 
         m_Pages.add(new RandomizerPanel(new EpisodeFileService(), m_ActivityPanel::addSelection), RANDOMIZER);
-        m_Pages.add(createLibraryPage(), LIBRARY);
+        m_Pages.add(new AnimeLibraryPanel(new TenraiCatalogClient(),
+                new AnimeLibraryService(new JsonAnimeLibraryRepository(ApplicationPaths.dataDirectory().resolve("library.json"))),
+                m_ArtworkCache), LIBRARY);
         m_Pages.add(m_ActivityPanel, ACTIVITY);
 
         JPanel root = new JPanel(new BorderLayout());
@@ -41,6 +51,13 @@ public final class MainWindow extends JFrame {
 
         if (icon != null)
             setIconImage(new javax.swing.ImageIcon(icon).getImage());
+
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent event) {
+                m_ArtworkCache.close();
+            }
+        });
     }
 
     private JPanel createSidebar() {
@@ -82,15 +99,15 @@ public final class MainWindow extends JFrame {
         JPanel footer = UITheme.panel();
         footer.setLayout(new BoxLayout(footer, BoxLayout.Y_AXIS));
 
-        JLabel mode = UITheme.label("LOCAL FILE MODE", 11, true, UITheme.ACCENT);
-        JLabel version = UITheme.label("Desktop UI · MS 1.2", 11, false, UITheme.MUTED);
+        JLabel mode = UITheme.label("CATALOG ENABLED", 11, true, UITheme.ACCENT);
+        JLabel provider = UITheme.label("Powered by Tenrai", 11, false, UITheme.MUTED);
 
         mode.setAlignmentX(LEFT_ALIGNMENT);
-        version.setAlignmentX(LEFT_ALIGNMENT);
+        provider.setAlignmentX(LEFT_ALIGNMENT);
 
         footer.add(mode);
         footer.add(Box.createVerticalStrut(7));
-        footer.add(version);
+        footer.add(provider);
 
         sidebar.add(footer, BorderLayout.SOUTH);
         return sidebar;
@@ -115,39 +132,6 @@ public final class MainWindow extends JFrame {
         parent.add(button);
         parent.add(Box.createVerticalStrut(8));
         button.setSelected(initiallySelected);
-    }
-
-    private JPanel createLibraryPage() {
-        JPanel page = new JPanel(new BorderLayout());
-        page.setBackground(UITheme.BACKGROUND);
-        page.setBorder(new EmptyBorder(30, 36, 36, 36));
-
-        JPanel layout = UITheme.panel(new BorderLayout(0, 24));
-
-        JPanel header = UITheme.panel();
-        header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
-
-        JLabel title = UITheme.label("Anime library", 29, true, UITheme.TEXT);
-        JLabel subtitle = UITheme.label("A home for the anime you want in your randomizer pool.",
-                                        13, false, UITheme.MUTED);
-
-        title.setAlignmentX(LEFT_ALIGNMENT);
-        subtitle.setAlignmentX(LEFT_ALIGNMENT);
-
-        header.add(title);
-        header.add(Box.createVerticalStrut(8));
-        header.add(subtitle);
-        layout.add(header, BorderLayout.NORTH);
-
-        JPanel empty = UITheme.card(new BorderLayout(0, 14));
-
-        empty.add(UITheme.label("Coming soon", 21, true, UITheme.TEXT), BorderLayout.NORTH);
-        empty.add(UITheme.label("Search, save, and browse anime once API integration arrives.",
-                                13, false, UITheme.MUTED), BorderLayout.CENTER);
-
-        layout.add(empty, BorderLayout.CENTER);
-        page.add(layout, BorderLayout.NORTH);
-        return page;
     }
 
 }

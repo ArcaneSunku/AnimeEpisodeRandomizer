@@ -17,6 +17,7 @@ java {
 
 dependencies {
     implementation("com.formdev:flatlaf:3.7.2")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.22.3")
 }
 
 application {

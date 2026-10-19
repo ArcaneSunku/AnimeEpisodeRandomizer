@@ -87,7 +87,7 @@ public final class RandomizerPanel extends JPanel {
 
         JLabel eyebrow = UITheme.label("RANDOMIZER  /  LOCAL MODE", 11, true, UITheme.ACCENT);
         JLabel title = UITheme.label("Find your next episode", 29, true, UITheme.TEXT);
-        JLabel subtitle = UITheme.label("Your anime collection and online episode catalog are coming next.",
+        JLabel subtitle = UITheme.label("Browse online anime in the library or choose an episode from a local list.",
                                         13, false, UITheme.MUTED);
 
         for (JLabel label : new JLabel[]{eyebrow, title, subtitle})
