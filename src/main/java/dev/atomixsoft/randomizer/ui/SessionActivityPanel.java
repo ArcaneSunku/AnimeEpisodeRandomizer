@@ -1,23 +1,21 @@
 package dev.atomixsoft.randomizer.ui;
 
-import javax.swing.Box;
-import javax.swing.BoxLayout;
-import javax.swing.JLabel;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
+import dev.atomixsoft.randomizer.model.SelectionRecord;
+
+import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import java.awt.BorderLayout;
-import java.awt.Dimension;
-import java.time.LocalTime;
+import java.awt.*;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 public final class SessionActivityPanel extends JPanel {
 
-    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("h:mm a");
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("h:mm a")
+            .withZone(ZoneId.systemDefault());
 
     private final JPanel m_Entries = UITheme.panel();
-    private final JLabel m_EmptyMessage = UITheme.label("No episodes selected during this session yet.", 15, false, UITheme.MUTED);
-
+    private final JLabel m_EmptyMessage = UITheme.label("No episodes selected during this session yet.",
+            15, false, UITheme.MUTED);
     private int m_SelectionCount;
 
     public SessionActivityPanel() {
@@ -29,36 +27,31 @@ public final class SessionActivityPanel extends JPanel {
 
         JPanel heading = UITheme.panel();
         heading.setLayout(new BoxLayout(heading, BoxLayout.Y_AXIS));
-
         JLabel title = UITheme.label("Session activity", 29, true, UITheme.TEXT);
-        JLabel subtitle = UITheme.label("Selections made since launching the app. Permanent history not implemented yet.",
-                                        13, false, UITheme.MUTED);
-
+        JLabel subtitle = UITheme.label("Selections from this run. Duplicate prevention persists after restarting.",
+                13, false, UITheme.MUTED);
         title.setAlignmentX(LEFT_ALIGNMENT);
         subtitle.setAlignmentX(LEFT_ALIGNMENT);
         heading.add(title);
         heading.add(Box.createVerticalStrut(8));
         heading.add(subtitle);
-
         content.add(heading, BorderLayout.NORTH);
 
         m_Entries.setLayout(new BoxLayout(m_Entries, BoxLayout.Y_AXIS));
-
         JPanel list = UITheme.panel(new BorderLayout());
         list.add(m_Entries, BorderLayout.NORTH);
         list.add(m_EmptyMessage, BorderLayout.CENTER);
         content.add(list, BorderLayout.CENTER);
 
-        JScrollPane scrollPane = new JScrollPane(content);
-        scrollPane.setBorder(null);
-        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        scrollPane.getViewport().setBackground(UITheme.BACKGROUND);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(18);
-
-        add(scrollPane, BorderLayout.CENTER);
+        JScrollPane scroll = new JScrollPane(content);
+        scroll.setBorder(null);
+        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.getViewport().setBackground(UITheme.BACKGROUND);
+        scroll.getVerticalScrollBar().setUnitIncrement(18);
+        add(scroll, BorderLayout.CENTER);
     }
 
-    public void addSelection(RandomizerPanel.Selection selection) {
+    public void addSelection(SelectionRecord selection) {
         if (m_SelectionCount++ == 0)
             m_EmptyMessage.setVisible(false);
 
@@ -68,19 +61,18 @@ public final class SessionActivityPanel extends JPanel {
 
         JPanel info = UITheme.panel();
         info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
-
-        JLabel episode = UITheme.label("Episode " + selection.episodeNumber(), 17, true, UITheme.TEXT);
-        JLabel anime = UITheme.label(selection.sourceFile().getFileName().toString(), 12, false, UITheme.MUTED);
+        JLabel episode = UITheme.label("Episode " + selection.episodeNumber() + " — " + selection.episodeTitle(),
+                15, true, UITheme.TEXT);
+        JLabel anime = UITheme.label(selection.animeTitle(), 12, false, UITheme.MUTED);
 
         episode.setAlignmentX(LEFT_ALIGNMENT);
         anime.setAlignmentX(LEFT_ALIGNMENT);
-
         info.add(episode);
         info.add(Box.createVerticalStrut(7));
         info.add(anime);
 
         entry.add(info, BorderLayout.CENTER);
-        entry.add(UITheme.label(LocalTime.now().format(TIME_FORMAT), 12, false, UITheme.MUTED), BorderLayout.EAST);
+        entry.add(UITheme.label(TIME_FORMAT.format(selection.selectedAt()), 12, false, UITheme.MUTED), BorderLayout.EAST);
 
         if (m_SelectionCount > 1)
             m_Entries.add(Box.createVerticalStrut(12), 0);

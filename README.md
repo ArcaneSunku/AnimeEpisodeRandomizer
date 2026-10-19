@@ -1,54 +1,52 @@
 # AnimeEpisodeRandomizer
 
-A little desktop app for those times when you want to watch an anime episode but don't feel like picking one yourself.
+A little desktop app for when you want to watch an anime episode but don't feel like choosing one yourself.
 
-The idea is simple: let the app pick an episode, then go watch it however you normally would. It doesn't stream anime or open a video player.
+Pick an anime you've saved, hit **Randomize episode**, and watch the result however you normally would. The app doesn't stream anime or open a video player.
 
-## What it can do
+## What it does
 
-- Search for anime and browse their episode lists using the [Tenrai API](https://api.tenrai.org/).
-- Save anime to a personal library that stays there when you close the app.
-- Display cover art and keep downloaded images cached locally.
-- Pick random episode numbers from a text file without repeating a number that's already been picked from that file.
-- Show selections made during the current session.
+- Search for anime and browse episode lists through the [Tenrai API](https://api.tenrai.org/).
+- Save anime to your own library, with cover art cached locally.
+- Cache complete episode lists and browse saved episodes offline.
+- Randomly pick an episode of **one chosen anime**, by default.
+- Optionally choose a group of anime and randomize across the group, either evenly by anime or evenly by episode.
+- Exclude filler or recap episodes, if you want.
+- Record every successful selection on disk so it won't be picked again after restarting.
+- Show selections made during the current run in Session Activity.
 
-**A quick heads-up:** the online library and the randomizer aren't connected yet. You can search for and save anime, but random picks still come from a text file. Episode history from the randomizer isn't saved separately across sessions yet; the remaining numbers are saved by updating the text file itself.
+The app doesn't automatically reset an exhausted episode pool. History browsing, undo, and reset controls are planned for a later update.
 
 ## Running it
 
-You'll need **Java 21**. There's no installer yet, so for now you can run the app from the project directory using the Gradle wrapper.
+You'll need **Java 21**. There isn't a packaged installer yet, so run the app with the Gradle wrapper from the project directory.
 
-On Linux or macOS:
+Linux or macOS:
 
 ```sh
 ./gradlew run
 ```
 
-On Windows:
+Windows:
 
 ```bat
 gradlew.bat run
 ```
 
-The first run will download the build dependencies. Searching the anime catalog and loading episode lists requires an internet connection.
+The first run downloads the build dependencies. Anime searches and catalog updates require an internet connection; previously cached episodes can be used offline. On Wayland desktops such as Hyprland, Swing runs through XWayland.
 
-The UI uses Swing, so on a Wayland desktop such as Hyprland it runs through XWayland.
+## Picking an episode
 
-## Using the randomizer
+1. Open **Anime Library**, search for a series, and add it to Saved.
+2. Open its episode list to populate the local catalog, or use **Refresh episode list** in Saved.
+3. Go to **Randomizer** and choose the anime.
+4. Adjust the filler/recap options if you'd like, and click **Randomize episode**.
 
-Create a `.txt` file with episode numbers separated by spaces or newlines, for example:
-
-```text
-1 2 3 4 5 6 7 8 9 10
-```
-
-Open that file from the **Randomizer** page and hit **Randomize episode**. After each pick, the app removes that number from the file so it won't be selected again.
-
-**The file is modified in place**, so keep a backup if you want to reuse the original list.
+The result is saved before it appears. If you've selected every eligible episode, the app tells you instead of repeating an earlier pick. To choose from multiple anime, switch to **Selected group** and select the shows you want to include.
 
 ## Where your data goes
 
-Saved anime are stored in `library.json`, in the normal application-data location for your operating system:
+Saved anime and selections live in the normal application-data directory for your OS:
 
 | System | Location |
 | --- | --- |
@@ -56,10 +54,8 @@ Saved anime are stored in `library.json`, in the normal application-data locatio
 | Linux | `~/.local/share/AnimeEpisodeRandomizer/` |
 | macOS | `~/Library/Application Support/AnimeEpisodeRandomizer/` |
 
-On Linux, the app also respects `XDG_DATA_HOME` if you've set it. Cover art is kept separately in your system's cache directory (on Linux, normally `~/.cache/AnimeEpisodeRandomizer/`). Clearing the artwork cache won't remove your saved anime.
+The app stores your saved collection in `library.json` and its selection history in `history.json`. On Linux, it respects `XDG_DATA_HOME` when configured.
 
-## What's next
+Artwork and episode catalogs are cached separately in the system's cache directory (on Linux, usually `~/.cache/AnimeEpisodeRandomizer/`). You can clear cached data without losing your saved library or selection history, although the episode catalogs must then be downloaded again.
 
-The main thing left is getting the saved anime library and randomizer working together. The plan is to build a local episode catalog, pick episodes directly from saved anime, and keep a proper selection history so repeats are avoided even after restarting the app.
-
-Built with Java 21, Swing, [FlatLaf](https://www.formdev.com/flatlaf/), and Gradle.
+Built with Java 21, Swing, [FlatLaf](https://www.formdev.com/flatlaf/), Jackson, and Gradle.
