@@ -10,6 +10,9 @@ import dev.atomixsoft.randomizer.service.AnimeLibraryService;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -40,6 +43,8 @@ public final class AnimeLibraryPanel extends JPanel {
 
     private final JButton m_AddButton = UITheme.button("Add to library", true);
     private final JButton m_RemoveButton = UITheme.button("Remove from library", false);
+    private final JButton m_ViewDiscoveredEpisodes = UITheme.button("View episodes", false);
+    private final JButton m_ViewSavedEpisodes = UITheme.button("View episodes", false);
 
     private final DefaultListModel<Anime> m_SavedModel = new DefaultListModel<>();
     private final JList<Anime> m_SavedList = new JList<>(m_SavedModel);
@@ -54,7 +59,6 @@ public final class AnimeLibraryPanel extends JPanel {
 
     private int m_CurrentResultPage;
     private int m_CurrentEpisodePage;
-
 
     private boolean m_LibraryReady;
     private boolean m_HasMoreResults;
@@ -91,22 +95,17 @@ public final class AnimeLibraryPanel extends JPanel {
         m_NextEpisodes.addActionListener(event -> loadEpisodes(m_SelectedAnime, m_CurrentEpisodePage + 1));
 
         m_AnimeList.addListSelectionListener(event -> {
-            if (!event.getValueIsAdjusting()) {
-                if (!m_Busy && m_Tabs.getSelectedIndex() == 0 && m_AnimeList.getSelectedValue() != null)
-                    loadEpisodes(m_AnimeList.getSelectedValue(), 1);
-
+            if (!event.getValueIsAdjusting())
                 updateButtons();
-            }
         });
 
         m_SavedList.addListSelectionListener(event -> {
-            if (!event.getValueIsAdjusting()) {
-                if (!m_Busy && m_Tabs.getSelectedIndex() == 1 && m_SavedList.getSelectedValue() != null)
-                    loadEpisodes(m_SavedList.getSelectedValue(), 1);
-
+            if (!event.getValueIsAdjusting())
                 updateButtons();
-            }
         });
+
+        m_ViewDiscoveredEpisodes.addActionListener(event -> openSelectedAnime(m_AnimeList));
+        m_ViewSavedEpisodes.addActionListener(event -> openSelectedAnime(m_SavedList));
 
         m_BackButton.addActionListener(event -> m_ViewLayout.show(m_Views, "collection"));
         m_Tabs.addChangeListener(event -> updateButtons());
@@ -149,7 +148,11 @@ public final class AnimeLibraryPanel extends JPanel {
         JPanel discoveryHeader = UITheme.panel(new BorderLayout());
 
         discoveryHeader.add(UITheme.label("SEARCH RESULTS", 12, true, UITheme.MUTED), BorderLayout.WEST);
-        discoveryHeader.add(m_AddButton, BorderLayout.EAST);
+        JPanel discoveryActions = UITheme.panel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        discoveryActions.add(m_ViewDiscoveredEpisodes);
+        discoveryActions.add(m_AddButton);
+
+        discoveryHeader.add(discoveryActions, BorderLayout.EAST);
         discovery.add(discoveryHeader, BorderLayout.NORTH);
 
         configureAnimeCards(m_AnimeList);
@@ -161,7 +164,11 @@ public final class AnimeLibraryPanel extends JPanel {
         JPanel savedHeader = UITheme.panel(new BorderLayout());
 
         savedHeader.add(UITheme.label("SAVED ANIME", 12, true, UITheme.MUTED), BorderLayout.WEST);
-        savedHeader.add(m_RemoveButton, BorderLayout.EAST);
+        JPanel savedActions = UITheme.panel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        savedActions.add(m_ViewSavedEpisodes);
+        savedActions.add(m_RemoveButton);
+
+        savedHeader.add(savedActions, BorderLayout.EAST);
         saved.add(savedHeader, BorderLayout.NORTH);
 
         configureAnimeCards(m_SavedList);
@@ -206,6 +213,39 @@ public final class AnimeLibraryPanel extends JPanel {
         list.setFixedCellHeight(274);
         list.setBorder(new EmptyBorder(8, 8, 8, 8));
         list.setCellRenderer(new AnimeCardRenderer(m_Artwork));
+
+        list.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (!SwingUtilities.isLeftMouseButton(event) || event.getClickCount() != 2)
+                    return;
+
+                int index = list.locationToIndex(event.getPoint());
+                Rectangle bounds = index < 0 ? null : list.getCellBounds(index, index);
+
+                if (bounds != null && bounds.contains(event.getPoint())) {
+                    list.setSelectedIndex(index);
+                    openSelectedAnime(list);
+                }
+            }
+        });
+
+        list.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "viewEpisodes");
+        list.getActionMap().put("viewEpisodes", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                openSelectedAnime(list);
+            }
+        });
+    }
+
+    private void openSelectedAnime(JList<Anime> list) {
+        if (m_Busy || m_Tabs.getSelectedIndex() != (list == m_AnimeList ? 0 : 1))
+            return;
+
+        Anime anime = list.getSelectedValue();
+        if (anime != null)
+            loadEpisodes(anime, 1);
     }
 
     private void preloadArtwork(JList<Anime> list, List<Anime> anime) {
@@ -391,7 +431,7 @@ public final class AnimeLibraryPanel extends JPanel {
 
                     m_Status.setText(results.items().isEmpty()
                             ? "No matching anime found."
-                            : "Select a result to browse its episodes.");
+                            : "Select an anime, then choose View episodes (or double-click its card).");
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
                     showError(exception);
@@ -488,6 +528,9 @@ public final class AnimeLibraryPanel extends JPanel {
 
         m_PreviousEpisodes.setEnabled(!m_Busy && m_CurrentEpisodePage > 1);
         m_NextEpisodes.setEnabled(!m_Busy && m_CurrentEpisodePage > 0 && m_HasMoreEpisodes);
+
+        m_ViewDiscoveredEpisodes.setEnabled(!m_Busy && m_AnimeList.getSelectedValue() != null);
+        m_ViewSavedEpisodes.setEnabled(!m_Busy && m_SavedList.getSelectedValue() != null);
     }
 
     private void showError(Throwable cause) {
