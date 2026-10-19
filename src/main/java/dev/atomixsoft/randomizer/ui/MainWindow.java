@@ -1,18 +1,24 @@
 package dev.atomixsoft.randomizer.ui;
 
 import dev.atomixsoft.randomizer.App;
+import dev.atomixsoft.randomizer.api.AnimeCatalogClient;
 import dev.atomixsoft.randomizer.api.tenrai.TenraiCatalogClient;
 import dev.atomixsoft.randomizer.cache.AnimeArtworkCache;
 import dev.atomixsoft.randomizer.persistence.ApplicationPaths;
 import dev.atomixsoft.randomizer.persistence.JsonAnimeLibraryRepository;
+import dev.atomixsoft.randomizer.persistence.JsonEpisodeCatalogRepository;
 import dev.atomixsoft.randomizer.service.AnimeLibraryService;
+import dev.atomixsoft.randomizer.service.EpisodeCatalogService;
 import dev.atomixsoft.randomizer.service.EpisodeFileService;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.net.URL;
 
 public final class MainWindow extends JFrame {
@@ -31,9 +37,15 @@ public final class MainWindow extends JFrame {
         super("Anime Episode Randomizer");
 
         m_Pages.add(new RandomizerPanel(new EpisodeFileService(), m_ActivityPanel::addSelection), RANDOMIZER);
-        m_Pages.add(new AnimeLibraryPanel(new TenraiCatalogClient(),
+        AnimeCatalogClient catalog = new TenraiCatalogClient();
+
+        EpisodeCatalogService episodeCatalogs = new EpisodeCatalogService(catalog,
+                new JsonEpisodeCatalogRepository(ApplicationPaths.cacheDirectory().resolve("episode-catalogs")));
+
+        m_Pages.add(new AnimeLibraryPanel(catalog,
                 new AnimeLibraryService(new JsonAnimeLibraryRepository(ApplicationPaths.dataDirectory().resolve("library.json"))),
-                m_ArtworkCache), LIBRARY);
+                m_ArtworkCache, episodeCatalogs), LIBRARY);
+
         m_Pages.add(m_ActivityPanel, ACTIVITY);
 
         JPanel root = new JPanel(new BorderLayout());
@@ -70,10 +82,7 @@ public final class MainWindow extends JFrame {
         top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
 
         JPanel brand = UITheme.panel(new BorderLayout(12, 0));
-        JLabel logo = UITheme.label("A", 24, true, UITheme.ACCENT);
-        logo.setHorizontalAlignment(SwingConstants.CENTER);
-        logo.setPreferredSize(new Dimension(36, 38));
-        brand.add(logo, BorderLayout.WEST);
+        brand.add(createLogo(), BorderLayout.WEST);
 
         JPanel brandText = UITheme.panel();
         brandText.setLayout(new BoxLayout(brandText, BoxLayout.Y_AXIS));
@@ -111,6 +120,36 @@ public final class MainWindow extends JFrame {
 
         sidebar.add(footer, BorderLayout.SOUTH);
         return sidebar;
+    }
+
+    private JLabel createLogo() {
+        URL resource = App.class.getResource("/images/icon.gif");
+        if (resource == null)
+            throw new IllegalStateException("Application icon resource could not be found.");
+
+        try {
+            BufferedImage original = ImageIO.read(resource);
+            if (original == null)
+                throw new IllegalStateException("Application icon could not be decoded.");
+
+            int size = 48;
+            BufferedImage scaled = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D graphics = scaled.createGraphics();
+
+            try {
+                graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                graphics.drawImage(original, 0, 0, size, size, null);
+            } finally {
+                graphics.dispose();
+            }
+
+            JLabel logo = new JLabel(new ImageIcon(scaled));
+            logo.setPreferredSize(new Dimension(size, size));
+
+            return logo;
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to load application icon.", exception);
+        }
     }
 
     private void addNavigation(JPanel parent, String label, String page, boolean initiallySelected) {

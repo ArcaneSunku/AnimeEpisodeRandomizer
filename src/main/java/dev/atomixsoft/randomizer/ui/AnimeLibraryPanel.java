@@ -4,8 +4,10 @@ import dev.atomixsoft.randomizer.api.AnimeCatalogClient;
 import dev.atomixsoft.randomizer.cache.AnimeArtworkCache;
 import dev.atomixsoft.randomizer.model.Anime;
 import dev.atomixsoft.randomizer.model.AnimeEpisode;
+import dev.atomixsoft.randomizer.model.EpisodeCatalog;
 import dev.atomixsoft.randomizer.model.Page;
 import dev.atomixsoft.randomizer.service.AnimeLibraryService;
+import dev.atomixsoft.randomizer.service.EpisodeCatalogService;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -14,14 +16,29 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 public final class AnimeLibraryPanel extends JPanel {
 
+    private static final int LOCAL_EPISODES_PER_PAGE = 25;
+    private static final DateTimeFormatter CACHE_DATE_FORMAT = DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a").withZone(ZoneId.systemDefault());
+
+    private interface CatalogUpdate {
+    }
+
+    private record CachedEpisodes(EpisodeCatalog catalog) implements CatalogUpdate {
+    }
+
+    private record RequestedEpisodePage(int number) implements CatalogUpdate {
+    }
+
     private final AnimeCatalogClient m_Catalog;
     private final AnimeLibraryService m_Library;
     private final AnimeArtworkCache m_Artwork;
+    private final EpisodeCatalogService m_EpisodeCatalogs;
 
     private final JTextField m_QueryField = new JTextField(24);
     private final JButton m_SearchButton = UITheme.button("Search", true);
@@ -53,24 +70,32 @@ public final class AnimeLibraryPanel extends JPanel {
     private final CardLayout m_ViewLayout = new CardLayout();
     private final JPanel m_Views = new JPanel(m_ViewLayout);
     private final JButton m_BackButton = UITheme.button("Back to collection", false);
+    private final JButton m_CacheEpisodesButton = UITheme.button("Refresh episode list", false);
 
     private String m_LastQuery;
     private Anime m_SelectedAnime;
+    private EpisodeCatalog m_CurrentCatalog;
 
     private int m_CurrentResultPage;
     private int m_CurrentEpisodePage;
+
+    private boolean m_UsingLocalCatalog;
+    private boolean m_LoadingSavedEpisodes;
+    private boolean m_EpisodeViewDismissed;
 
     private boolean m_LibraryReady;
     private boolean m_HasMoreResults;
     private boolean m_HasMoreEpisodes;
     private boolean m_Busy;
 
-    public AnimeLibraryPanel(AnimeCatalogClient catalog, AnimeLibraryService library, AnimeArtworkCache artwork) {
+    public AnimeLibraryPanel(AnimeCatalogClient catalog, AnimeLibraryService library,
+                             AnimeArtworkCache artwork, EpisodeCatalogService episodeCatalogs) {
         super(new BorderLayout());
 
         m_Catalog = catalog;
         m_Library = library;
         m_Artwork = artwork;
+        m_EpisodeCatalogs = episodeCatalogs;
 
         setBackground(UITheme.BACKGROUND);
 
@@ -91,8 +116,8 @@ public final class AnimeLibraryPanel extends JPanel {
         m_PreviousResults.addActionListener(event -> search(m_CurrentResultPage - 1));
         m_NextResults.addActionListener(event -> search(m_CurrentResultPage + 1));
 
-        m_PreviousEpisodes.addActionListener(event -> loadEpisodes(m_SelectedAnime, m_CurrentEpisodePage - 1));
-        m_NextEpisodes.addActionListener(event -> loadEpisodes(m_SelectedAnime, m_CurrentEpisodePage + 1));
+        m_PreviousEpisodes.addActionListener(event -> changeEpisodePage(m_CurrentEpisodePage - 1));
+        m_NextEpisodes.addActionListener(event -> changeEpisodePage(m_CurrentEpisodePage + 1));
 
         m_AnimeList.addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting())
@@ -104,10 +129,16 @@ public final class AnimeLibraryPanel extends JPanel {
                 updateButtons();
         });
 
+        m_CacheEpisodesButton.addActionListener(event -> cacheSelectedEpisodes());
+
         m_ViewDiscoveredEpisodes.addActionListener(event -> openSelectedAnime(m_AnimeList));
         m_ViewSavedEpisodes.addActionListener(event -> openSelectedAnime(m_SavedList));
 
-        m_BackButton.addActionListener(event -> m_ViewLayout.show(m_Views, "collection"));
+        m_BackButton.addActionListener(event -> {
+            m_EpisodeViewDismissed = true;
+            m_ViewLayout.show(m_Views, "collection");
+        });
+
         m_Tabs.addChangeListener(event -> updateButtons());
         m_AddButton.addActionListener(event -> addSelectedAnime());
         m_RemoveButton.addActionListener(event -> removeSelectedAnime());
@@ -148,7 +179,7 @@ public final class AnimeLibraryPanel extends JPanel {
         JPanel discoveryHeader = UITheme.panel(new BorderLayout());
 
         discoveryHeader.add(UITheme.label("SEARCH RESULTS", 12, true, UITheme.MUTED), BorderLayout.WEST);
-        JPanel discoveryActions = UITheme.panel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        JPanel discoveryActions = UITheme.panel(new FlowLayout(FlowLayout.RIGHT, 8, 12));
         discoveryActions.add(m_ViewDiscoveredEpisodes);
         discoveryActions.add(m_AddButton);
 
@@ -164,7 +195,7 @@ public final class AnimeLibraryPanel extends JPanel {
         JPanel savedHeader = UITheme.panel(new BorderLayout());
 
         savedHeader.add(UITheme.label("SAVED ANIME", 12, true, UITheme.MUTED), BorderLayout.WEST);
-        JPanel savedActions = UITheme.panel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        JPanel savedActions = UITheme.panel(new FlowLayout(FlowLayout.RIGHT, 8, 12));
         savedActions.add(m_ViewSavedEpisodes);
         savedActions.add(m_RemoveButton);
 
@@ -175,11 +206,53 @@ public final class AnimeLibraryPanel extends JPanel {
 
         saved.add(new JScrollPane(m_SavedList), BorderLayout.CENTER);
 
+        JPanel savedFooter = UITheme.panel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        savedFooter.add(m_CacheEpisodesButton);
+        saved.add(savedFooter, BorderLayout.SOUTH);
+
         m_Tabs.addTab("Discover", discovery);
         m_Tabs.addTab("Saved", saved);
 
         panel.add(m_Tabs, BorderLayout.CENTER);
         return panel;
+    }
+
+    private void cacheSelectedEpisodes() {
+        Anime anime = m_SavedList.getSelectedValue();
+        if (m_Busy || !m_LibraryReady || anime == null)
+            return;
+
+        setBusy(true, "Refreshing episode catalog for " + anime.title() + "...");
+
+        new SwingWorker<EpisodeCatalogService.CatalogResult, Integer>() {
+
+            @Override
+            protected EpisodeCatalogService.CatalogResult doInBackground() throws IOException, InterruptedException {
+                return m_EpisodeCatalogs.refresh(anime.malId(), page -> publish(page));
+            }
+
+            @Override
+            protected void process(List<Integer> pages) {
+                m_Status.setText("Fetching episode page " + pages.get(pages.size() - 1) + " for " + anime.title() + "...");
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    EpisodeCatalogService.CatalogResult result = get();
+                    m_Status.setText(catalogStatus(result));
+                    m_Status.setToolTipText(result.warning());
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    showError(exception);
+                } catch (ExecutionException exception) {
+                    showError(exception.getCause());
+                } finally {
+                    setBusy(false, null);
+                }
+            }
+
+        }.execute();
     }
 
     private JPanel createEpisodesPanel() {
@@ -244,8 +317,135 @@ public final class AnimeLibraryPanel extends JPanel {
             return;
 
         Anime anime = list.getSelectedValue();
-        if (anime != null)
+        if (anime == null)
+            return;
+
+        if (list == m_SavedList)
+            openSavedEpisodes(anime);
+        else
             loadEpisodes(anime, 1);
+    }
+
+    private void openSavedEpisodes(Anime anime) {
+        if (m_Busy || anime == null)
+            return;
+
+        m_SelectedAnime = anime;
+        m_CurrentCatalog = null;
+        m_UsingLocalCatalog = false;
+        m_CurrentEpisodePage = 0;
+        m_EpisodeViewDismissed = false;
+        m_LoadingSavedEpisodes = true;
+
+        setBusy(true, "Loading saved episodes for " + anime.title() + "...");
+
+        new SwingWorker<EpisodeCatalogService.CatalogResult, CatalogUpdate>() {
+            @Override
+            protected EpisodeCatalogService.CatalogResult doInBackground() throws IOException, InterruptedException {
+                return m_EpisodeCatalogs.getOrRefresh(anime.malId(),
+                        catalog -> publish(new CachedEpisodes(catalog)),
+                        page -> publish(new RequestedEpisodePage(page)));
+            }
+
+            @Override
+            protected void process(List<CatalogUpdate> updates) {
+                if (!m_LoadingSavedEpisodes)
+                    return;
+
+                for (CatalogUpdate update : updates) {
+                    if (update instanceof CachedEpisodes(EpisodeCatalog catalog)) {
+                        m_CurrentCatalog = catalog;
+                        m_UsingLocalCatalog = true;
+
+                        if (!m_EpisodeViewDismissed)
+                            showLocalEpisodePage(1);
+
+                        m_Status.setText("Showing saved episodes while checking for updates...");
+                    } else if (update instanceof RequestedEpisodePage(int number)) {
+                        m_Status.setText("Checking page " + number + " for " + anime.title() + "...");
+                    }
+                }
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    EpisodeCatalogService.CatalogResult result = get();
+                    int currentPage = m_UsingLocalCatalog ? m_CurrentEpisodePage : 1;
+
+                    m_CurrentCatalog = result.catalog();
+                    m_UsingLocalCatalog = true;
+
+                    if (!m_EpisodeViewDismissed) {
+                        int pages = Math.max(1, (m_CurrentCatalog.episodes().size() + LOCAL_EPISODES_PER_PAGE - 1) / LOCAL_EPISODES_PER_PAGE);
+                        showLocalEpisodePage(Math.clamp(currentPage, 1, pages));
+                    }
+
+                    m_Status.setText(catalogStatus(result));
+                    m_Status.setToolTipText(result.warning());
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    showError(exception);
+                } catch (ExecutionException exception) {
+                    showError(exception.getCause());
+                } finally {
+                    m_LoadingSavedEpisodes = false;
+                    setBusy(false, null);
+                }
+            }
+        }.execute();
+    }
+
+    private String catalogStatus(EpisodeCatalogService.CatalogResult result) {
+        int count = result.catalog().episodes().size();
+        String updated = CACHE_DATE_FORMAT.format(result.catalog().fetchedAt());
+
+        return switch (result.source()) {
+            case CACHE -> "Loaded " + count + " saved episodes (updated " + updated + ").";
+            case NETWORK -> "Updated " + count + " episodes (" + updated + ").";
+            case CACHE_FALLBACK -> "Could not refresh. Showing " + count + " saved episodes from " + updated + ".";
+        };
+    }
+
+    private void changeEpisodePage(int page) {
+        if (page < 1 || (m_Busy && !(m_LoadingSavedEpisodes && m_UsingLocalCatalog)))
+            return;
+
+        if (m_UsingLocalCatalog) {
+            showLocalEpisodePage(page);
+            m_Status.setText("Browsing locally cached episodes.");
+        } else {
+            loadEpisodes(m_SelectedAnime, page);
+        }
+    }
+
+    private void showLocalEpisodePage(int page) {
+        if (m_CurrentCatalog == null || m_SelectedAnime == null || page < 1)
+            return;
+
+        List<AnimeEpisode> episodes = m_CurrentCatalog.episodes();
+        int totalPages = Math.max(1, (episodes.size() + LOCAL_EPISODES_PER_PAGE - 1) / LOCAL_EPISODES_PER_PAGE);
+
+        if (page > totalPages)
+            return;
+
+        int from = (page - 1) * LOCAL_EPISODES_PER_PAGE;
+        int to = Math.min(from + LOCAL_EPISODES_PER_PAGE, episodes.size());
+
+        m_EpisodeModel.clear();
+        episodes.subList(from, to).forEach(m_EpisodeModel::addElement);
+
+        String name = m_SelectedAnime.title();
+
+        m_EpisodeHeading.setText("EPISODES — " + (name.length() > 40 ? name.substring(0, 37) + "..." : name));
+        m_EpisodeHeading.setToolTipText(name);
+
+        m_CurrentEpisodePage = page;
+        m_HasMoreEpisodes = page < totalPages;
+        m_EpisodePage.setText("Page " + page + " / " + totalPages);
+
+        m_ViewLayout.show(m_Views, "episodes");
+        updateButtons();
     }
 
     private void preloadArtwork(JList<Anime> list, List<Anime> anime) {
@@ -423,6 +623,9 @@ public final class AnimeLibraryPanel extends JPanel {
                     m_ViewLayout.show(m_Views, "collection");
 
                     m_SelectedAnime = null;
+                    m_CurrentCatalog = null;
+                    m_UsingLocalCatalog = false;
+
                     m_EpisodeModel.clear();
                     m_EpisodeHeading.setText("EPISODES");
                     m_CurrentEpisodePage = 0;
@@ -448,9 +651,7 @@ public final class AnimeLibraryPanel extends JPanel {
         if (m_Busy || anime == null || page < 1)
             return;
 
-        boolean changedAnime = m_SelectedAnime == null
-                || m_SelectedAnime.malId() != anime.malId();
-
+        boolean changedAnime = m_SelectedAnime == null || m_SelectedAnime.malId() != anime.malId();
         m_SelectedAnime = anime;
 
         if (changedAnime) {
@@ -472,6 +673,10 @@ public final class AnimeLibraryPanel extends JPanel {
             protected void done() {
                 try {
                     Page<AnimeEpisode> episodes = get();
+
+                    m_SelectedAnime = anime;
+                    m_CurrentCatalog = null;
+                    m_UsingLocalCatalog = false;
 
                     m_EpisodeModel.clear();
                     episodes.items().forEach(m_EpisodeModel::addElement);
@@ -506,8 +711,10 @@ public final class AnimeLibraryPanel extends JPanel {
     private void setBusy(boolean busy, String message) {
         m_Busy = busy;
 
-        if (message != null)
+        if (message != null) {
             m_Status.setText(message);
+            m_Status.setToolTipText(null);
+        }
 
         updateButtons();
     }
@@ -526,11 +733,15 @@ public final class AnimeLibraryPanel extends JPanel {
         m_PreviousResults.setEnabled(!m_Busy && m_CurrentResultPage > 1);
         m_NextResults.setEnabled(!m_Busy && m_CurrentResultPage > 0 && m_HasMoreResults);
 
-        m_PreviousEpisodes.setEnabled(!m_Busy && m_CurrentEpisodePage > 1);
-        m_NextEpisodes.setEnabled(!m_Busy && m_CurrentEpisodePage > 0 && m_HasMoreEpisodes);
+        boolean localPagingAvailable = !m_Busy || (m_LoadingSavedEpisodes && m_UsingLocalCatalog);
+
+        m_PreviousEpisodes.setEnabled(localPagingAvailable && m_CurrentEpisodePage > 1);
+        m_NextEpisodes.setEnabled(localPagingAvailable && m_CurrentEpisodePage > 0 && m_HasMoreEpisodes);
 
         m_ViewDiscoveredEpisodes.setEnabled(!m_Busy && m_AnimeList.getSelectedValue() != null);
         m_ViewSavedEpisodes.setEnabled(!m_Busy && m_SavedList.getSelectedValue() != null);
+
+        m_CacheEpisodesButton.setEnabled(!m_Busy && m_LibraryReady && m_SavedList.getSelectedValue() != null);
     }
 
     private void showError(Throwable cause) {

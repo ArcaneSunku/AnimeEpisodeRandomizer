@@ -54,6 +54,15 @@ public final class TenraiCatalogClient implements AnimeCatalogClient {
     }
 
     @Override
+    public void invalidateEpisodeCache(int animeId) {
+        if(animeId <= 0)
+            throw new IllegalArgumentException("Anime ID must be positive!");
+
+        String prefix = "/anime/" + animeId + "/episodes?";
+        m_Cache.keySet().removeIf(path -> path.startsWith(prefix));
+    }
+
+    @Override
     public Page<Anime> searchAnime(String query, int page) throws IOException, InterruptedException {
         if (query == null || query.isBlank())
             throw new IllegalArgumentException("Search query must not be blank.");
@@ -95,24 +104,34 @@ public final class TenraiCatalogClient implements AnimeCatalogClient {
             throw new IllegalArgumentException("Anime ID and page number must be positive.");
 
         JsonNode response = fetch("/anime/" + animeId + "/episodes?page=" + page, EPISODE_CACHE_LIFETIME);
+        JsonNode nextPage = response.path("pagination").path("has_next_page");
+
+        if (!nextPage.isBoolean())
+            throw new IOException("Tenrai returned invalid pagination for anime " + animeId + ", page " + page + ".");
 
         List<AnimeEpisode> episodes = new ArrayList<>();
         for (JsonNode item : data(response)) {
-            int number = item.path("mal_id").asInt(0);
+            JsonNode numberNode = item.path("mal_id");
 
-            if (number <= 0)
-                continue;
+            if (!numberNode.isIntegralNumber() || !numberNode.canConvertToInt() || numberNode.intValue() <= 0)
+                throw new IOException("Tenrai returned an invalid episode number for anime " + animeId + ", page " + page + ".");
+
+            JsonNode filler = item.path("filler");
+            JsonNode recap = item.path("recap");
+
+            if (!filler.isBoolean() || !recap.isBoolean())
+                throw new IOException("Tenrai returned invalid episode flags for anime " + animeId + ", page " + page + ".");
 
             String title = value(item, "title");
+
             episodes.add(new AnimeEpisode(
-                    number,
+                    numberNode.intValue(),
                     title.isBlank() ? "Untitled episode" : title,
-                    item.path("filler").asBoolean(false),
-                    item.path("recap").asBoolean(false)
-            ));
+                    filler.booleanValue(),
+                    recap.booleanValue()));
         }
 
-        return new Page<>(episodes, page, hasNextPage(response));
+        return new Page<>(episodes, page, nextPage.booleanValue());
     }
 
     private synchronized JsonNode fetch(String path, Duration cacheLifetime) throws IOException, InterruptedException {
